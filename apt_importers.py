@@ -1,8 +1,18 @@
-#Code Imported from apt-tools https://github.com/oscarbranson/apt-tools
 import pandas as pd
 import struct
 import numpy as np
 import os
+
+
+def read_file(f):
+    _, ext = os.path.splitext(f)
+    if ext == '.epos':
+        return read_epos(f)
+    elif ext == '.txt':
+        return read_txt(f)
+    elif ext == '.pos':
+        return read_pos(f)
+
 
 def read_pos(f):
     """ Loads an APT .pos file as a pandas dataframe.
@@ -23,15 +33,6 @@ def read_pos(f):
     return pos
 
 
-def read_file(f):
-
-    _, ext = os.path.splitext(f)
-    if ext == '.epos':
-        return read_epos(f)
-    elif ext == '.txt':
-        return read_txt(f)
-
-
 def read_txt(f):
 
     fopen = open(f, 'rb')
@@ -41,6 +42,17 @@ def read_txt(f):
 
     return pd.DataFrame(data, columns=labels)
 
+
+def file_to_pcd(dpos, filename):
+
+    import matplotlib.colors as cols
+    data = dpos.loc[:, ['x', 'y', 'z']].values
+    #colors = np.asarray(list(dpos.colour.apply(cols.hex2color)))
+
+    import pcl
+    pcd = pcl.PointCloud() #_PointXYZRGB()
+    pcd.from_array(data.astype(np.float32))
+    pcd._to_pcd_file(filename)
 
 def read_epos(f):
     """Loads an APT .epos file as a pandas dataframe.
@@ -148,18 +160,17 @@ def deconvolve(lpos):
 
     out = []
     pattern = re.compile(r'([A-Za-z]+):([0-9]+)')
-
-    for g,d in lpos.groupby('comp'):
-        if g is not '':
-            for i in range(len(g.split(' '))):
-                tmp = d.copy()
-                cn = pattern.search(g.split(' ')[i]).groups()
-                tmp['element'] = cn[0]
-                tmp['n'] = cn[1]
-                out.append(tmp.copy())
+    lpos = lpos.loc[lpos.comp != '']
+    for g, d in lpos.groupby('comp'):
+         for i in range(len(g.split(' '))):
+              tmp = d.copy()
+              cn = pattern.search(g.split(' ')[i]).groups()
+              tmp['element'] = cn[0]
+              tmp['n'] = cn[1]
+              out.append(tmp.copy())
     return pd.concat(out)
 
-def volvis(pos, size=2, alpha=1, colors=None):
+def volvis(pos, size=2, alpha=1, colors=None, save=False, obb=None):
     """Displays a 3D point cloud in an OpenGL viewer window.
     If points are not labelled with colours, point brightness
     is determined by Da values (higher = whiter)"""
@@ -173,7 +184,18 @@ def volvis(pos, size=2, alpha=1, colors=None):
     canvas = scene.SceneCanvas(keys='interactive', show=True, bgcolor='white')
     view = canvas.central_widget.add_view()
 
-    cpos = pos.loc[:, ['x', 'y', 'z']].values
+    if isinstance(pos, pd.DataFrame):
+        cpos = pos.loc[:, ['x', 'y', 'z']].values
+    elif isinstance(pos, np.ndarray):
+        cpos = pos
+    if obb is None:
+        from pyobb.obb import OBB
+        obb = OBB.build_from_points(cpos)
+
+    points = np.asarray(obb.points)
+    faces = np.asarray([[0, 1], [1, 2], [2, 3], [3, 0], [0, 5], [5, 6], [6, 3],
+                        [1, 4], [4, 7], [7, 2], [7, 6], [6, 5], [4, 5]])
+
 
     if 'colour' in pos.columns:
         colours2 = np.asarray(list(pos.colour.apply(cols.hex2color)))
@@ -189,10 +211,20 @@ def volvis(pos, size=2, alpha=1, colors=None):
         np.hstack([colours, np.array([0.5] * len(colours))[..., None]])
 
     p1 = scene.visuals.Markers()
-    p1.set_data(cpos, face_color=colours, edge_width=1, size=5) #, edge_width=0, size=size)
+    p1.set_data(cpos, face_color=colours, edge_width=1, size=3) #, edge_width=0, size=size)
 
     view.add(p1)
 
+    for f in faces:
+        p2 = scene.visuals.Line()
+        pois = np.asarray([points[f[0]], points[f[1]]])
+        p2.set_data(pois, color='k')
+        view.add(p2)
+
+    face_colors = np.ones((faces.shape[0], 3))
+
+    #mesh = scene.visuals.Mesh(vertices=points, faces=faces, face_colors=face_colors)
+    #view.add(mesh)
     # make legend
 
     ions = []
@@ -206,15 +238,15 @@ def volvis(pos, size=2, alpha=1, colors=None):
     pts = np.array([[20] * len(ions), np.linspace(20, 20 * len(ions), len(ions))]).T
     tpts = np.array([[30] * len(ions), np.linspace(20, 20 * len(ions), len(ions))]).T
 
-    legb = scene.widgets.ViewBox(parent=view, border_color='red', bgcolor='k')
-    legb.pos = 0, 0
+    legb = scene.widgets.ViewBox(parent=view, border_color='k', bgcolor='w')
+    legb.pos = 200, 20
     legb.size = 100, 20 * len(ions) + 20
 
     leg = scene.visuals.Markers()
     leg.set_data(pts, face_color=cs)
     legb.add(leg)
 
-    legt = scene.visuals.Text(text=ions, pos=tpts, color='white', anchor_x='left', anchor_y='center', font_size=10)
+    legt = scene.visuals.Text(text=ions, pos=tpts, color='k', anchor_x='left', anchor_y='center', font_size=20)
 
     legb.add(legt)
 
@@ -225,8 +257,14 @@ def volvis(pos, size=2, alpha=1, colors=None):
     if sys.flags.interactive == 0:
         app.run()
 
+    if save is True:
+        from vispy import io
+        img = canvas.render()
+        io.write_png('original.png', img)
+
+
 # Module to display multiple poses together in a single view
-def multiple_volvis(poses, size=2, alpha=1, colors=None, save=False):
+def multiple_volvis(poses, size=2, alpha=1, colors=None, save=False, obb=None):
     """Displays a 3D point cloud in an OpenGL viewer window.
     If points are not labelled with colours, point brightness
     is determined by Da values (higher = whiter)"""
@@ -239,30 +277,64 @@ def multiple_volvis(poses, size=2, alpha=1, colors=None, save=False):
 
     canvas = scene.SceneCanvas(keys='interactive', show=True, bgcolor='white')
     view = canvas.central_widget.add_view()
-
+    if colors is None:
+        colors = [None]*len(poses)
     for pos, color in zip(poses, colors):
         cpos = pos.loc[:, ['x', 'y', 'z']].values
 
-        if 'colour' in pos.columns:
-            colours2 = np.asarray(list(pos.colour.apply(cols.hex2color)))
-        else:
-            Dapc = pos.Da.values / pos.Da.max()
-            colours2 = np.array(zip(Dapc, Dapc, Dapc))
+        if colors is None:
+            if 'colour' in pos.columns:
+                colours2 = np.asarray(list(pos.colour.apply(cols.hex2color)))
+            else:
+                Dapc = pos.Da.values / pos.Da.max()
+                colours2 = np.array(zip(Dapc, Dapc, Dapc))
 
-        if colors is not None:
-            colours = color
-        else:
             colours = colours2
-        if alpha is not 1:
-            np.hstack([colours, np.array([0.5] * len(colours))[..., None]])
+        else:
+            colours=color
+            if alpha is not 1:
+                np.hstack([colours, np.array([0.5] * len(colours))[..., None]])
 
         p1 = scene.visuals.Markers()
         p1.set_data(cpos, face_color=colours, edge_width=1, size=5) #, edge_width=0, size=size)
 
         view.add(p1)
 
+        if obb is not None:
+            points = np.asarray(obb.points)
+            faces = np.asarray([[0, 1], [1, 2], [2, 3], [3, 0], [0, 5], [5, 6], [6, 3],
+                                [1, 4], [4, 7], [7, 2], [7, 6], [6, 5], [4, 5]])
+            for f in faces:
+                p2 = scene.visuals.Line()
+                pois = np.asarray([points[f[0]], points[f[1]]])
+                p2.set_data(pois, color='k')
+                view.add(p2)
+
         view.camera = 'turntable'
         axis = visuals.XYZAxis(parent=view.scene)
+
+        ions = []
+        cs = []
+        for g, d in pos.groupby('colour'):
+            ions.append(re.sub(r':1?|\s?', '', d.comp.iloc[0]))
+            cs.append(cols.hex2color(g))
+        ions = np.array(ions)
+        cs = np.asarray(cs)
+
+        pts = np.array([[20] * len(ions), np.linspace(20, 20 * len(ions), len(ions))]).T
+        tpts = np.array([[30] * len(ions), np.linspace(20, 20 * len(ions), len(ions))]).T
+
+        legb = scene.widgets.ViewBox(parent=view, border_color='k', bgcolor='w')
+        legb.pos = 200, 20
+        legb.size = 100, 20 * len(ions) + 20
+
+        leg = scene.visuals.Markers()
+        leg.set_data(pts, face_color=cs)
+        legb.add(leg)
+
+        legt = scene.visuals.Text(text=ions, pos=tpts, color='k', anchor_x='left', anchor_y='center', font_size=20)
+
+        legb.add(legt)
 
     canvas.show()
     if sys.flags.interactive == 0:
@@ -274,14 +346,14 @@ def multiple_volvis(poses, size=2, alpha=1, colors=None, save=False):
         io.write_png('multiple.png', img)
 
 
-def convex_hull_clusters(pos, comm_str, pos2=None, save=False, viz=False):
+def convex_hull_clusters(pos, comm_str, pos2=None, save=False, viz=False, obb=None):
 
     n_clusters = len(np.unique(comm_str))
     a, b = np.histogram(comm_str, bins=n_clusters)
     sort_a = np.argsort(a)[::-1]
 
     vertices = pos.loc[:, ['x', 'y', 'z']].values
-
+    from scipy.spatial import ConvexHull
 
     if pos2 is not None:
         cpos = pos2.loc[:, ['x', 'y', 'z']].values
@@ -289,35 +361,49 @@ def convex_hull_clusters(pos, comm_str, pos2=None, save=False, viz=False):
         colours2 = np.asarray(list(pos2.colour.apply(cols.hex2color)))
 
     if viz is True:
-        cmap = np.random.rand(4, 3)
         from vispy import scene, app
         from vispy.scene import visuals
 
         canvas = scene.SceneCanvas(keys='interactive', show=True, bgcolor='white')
         view = canvas.central_widget.add_view()
         #p = []
-    volume = []
-    from scipy.spatial import ConvexHull
-    for i in range(4):
+    #volume = []
+
+    if viz is True:
+        if obb is not None:
+            points = np.asarray(obb.points)
+            faces = np.asarray([[0, 1], [1, 2], [2, 3], [3, 0], [0, 5], [5, 6], [6, 3],
+                                [1, 4], [4, 7], [7, 2], [7, 6], [6, 5], [4, 5]])
+            for f in faces:
+                p2 = scene.visuals.Line()
+                pois = np.asarray([points[f[0]], points[f[1]]])
+                p2.set_data(pois, color='k')
+                view.add(p2)
+
+    p = 8
+    cmap = np.random.rand(p, 3)
+
+    for i in range(p):
         ind = np.where(comm_str == sort_a[i])[0]
         hull = ConvexHull(vertices[ind, :])
 
         if viz is True:
-            faces = hull.simplices
-            mesh = scene.visuals.Mesh(vertices=vertices[ind, :], faces=faces, color=cmap[i])
 
-            #p1 = scene.visuals.Markers()
-            #p1.set_data(cpos, size=1, face_color=colours2)
-
+            face = hull.simplices
+            mesh = scene.visuals.Mesh(vertices=vertices[ind, :], faces=face, color=cmap[i])
             view.add(mesh)
-            #view.add(p1)
 
-            view.camera = 'turntable'
-            axis = visuals.XYZAxis(parent=view.scene)
+    if pos2 is not None:
+         p1 = scene.visuals.Markers()
+         p1.set_data(cpos, size=1, face_color=colours2)
+         view.add(p1)
 
-        print 'Volume of Cluster: ', hull.volume
-        volume.append(hull.volume)
+    view.camera = 'turntable'
+    axis = visuals.XYZAxis(parent=view.scene)
 
+        #print 'Volume of Cluster: ', hull.volume
+        #volume.append(hull.volume)
+    
     if viz is True:
         canvas.show()
         import sys
@@ -329,6 +415,8 @@ def convex_hull_clusters(pos, comm_str, pos2=None, save=False, viz=False):
             img = canvas.render()
             io.write_png('convex.png', img)
 
+    ind = np.where(comm_str == sort_a[0])[0]
+    hull = ConvexHull(vertices[ind, :])
     print 'Volume of Cluster: ', hull.volume
     return hull.volume
 
@@ -339,10 +427,14 @@ def volvis_radius(pos, colors=None):
     import sys
     from vispy.scene import visuals
 
-    cpos = pos.loc[:, ['x', 'y', 'z']].values
+    if isinstance(pos, pd.DataFrame):
+        cpos = pos.loc[:, ['x', 'y', 'z']].values
+    elif isinstance(pos, np.ndarray):
+        cpos = pos
     radius = pos.loc[:,'radius'].values.astype(np.int)
     uniq_rad = np.unique(radius)
     cmap = np.random.rand(len(uniq_rad), 3)
+
 
     if colors is None:
         colors = np.asarray([cmap[uniq_rad == rad] for rad in radius]).reshape(len(pos), 3)
@@ -363,6 +455,19 @@ def volvis_radius(pos, colors=None):
     if sys.flags.interactive == 0:
         app.run()
 
+# Overlapping Visualization
+def overlap_viz(cluster_matrix):
 
+    dim = cluster_matrix.shape[0]
+    n_clusters = cluster_matrix.shape[1]
+    #cm = plt.get_cmap('gist_rainbow')
+    #cmap = np.asarray([cm(1. * i / n_clusters) for i in range(n_clusters)])
+    cmap = np.random.rand(n_clusters, 3)
+
+    colors = []
+    for cl in cluster_matrix:
+        colors.append(np.average(cmap, axis=0, weights=cl))
+
+    return np.asarray(colors)
 
 
