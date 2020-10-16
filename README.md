@@ -3,7 +3,7 @@ https://github.com/oscarbranson/apt-tools
 
 ##### How to use:
 
-Step 1: Download the whole folder into a folder of choice. Create a subfolder named 'Data' inside the main folder, and download the demo datafile into the new subfolder using this [link](https://buffalo.box.com/s/iy8my7kzpyplcty67xn9pixf08mm1dj4). 
+Step 1: Download the whole folder into a folder of choice. Create a subfolder named 'Data' inside the main folder, and download the demo datafile into the new subfolder using this [link](https://buffalo.box.com/shared/static/iy8my7kzpyplcty67xn9pixf08mm1dj4.csv). 
 
 Step 2: Open terminal and use conda to create an environment as:
 
