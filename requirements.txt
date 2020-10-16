@@ -1,0 +1,9 @@
+pandas
+matplotlib
+pyobb
+vispy
+open3d
+networkx
+python-louvain
+scikit-learn
+PyQt5
