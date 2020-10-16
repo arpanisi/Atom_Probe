@@ -227,11 +227,11 @@ def deconvolve(lpos):
 def volvis_open3d(pos, obb=None):
 
     import matplotlib.colors as cols
-    pcd = PointCloud()
+    pcd = geometry.PointCloud()
     cpos = pos.loc[:, ['x', 'y', 'z']].values
 
-    pcd.points = Vector3dVector(cpos)
-    pcd.colors = Vector3dVector(np.asarray(list(pos.Color.apply(cols.hex2color))))
+    pcd.points = utility.Vector3dVector(cpos)
+    pcd.colors = utility.Vector3dVector(np.asarray(list(pos.Color.apply(cols.hex2color))))
 
     if obb is None:
         obb = OBB.build_from_points(cpos)
@@ -240,14 +240,14 @@ def volvis_open3d(pos, obb=None):
     lines = [[0, 1], [1, 2], [2, 3], [3, 0], [0, 5], [5, 6], [6, 3],
                         [1, 4], [4, 7], [7, 2], [7, 6], [6, 5], [4, 5]]
 
-    line_set = LineSet()
-    line_set.points = Vector3dVector(points)
-    line_set.lines = Vector2iVector(lines)
-    line_set.colors = Vector3dVector([[1, 0, 0] for i in range(len(lines))])
+    line_set = geometry.LineSet()
+    line_set.points = utility.Vector3dVector(points)
+    line_set.lines = utility.Vector2iVector(lines)
+    line_set.colors = utility.Vector3dVector([[1, 0, 0] for i in range(len(lines))])
 
-    draw_geometries([pcd, line_set])
+    visualization.draw_geometries([pcd, line_set])
 
-def volvis(pos, size=3, alpha=1, colors=None, save=False, obb=None):
+def volvis(pos, size=3, alpha=1, colors=None, save=False, obb=None, legend=False):
     """Displays a 3D point cloud in an OpenGL viewer window.
     If points are not labelled with colours, point brightness
     is determined by Da values (higher = whiter)"""
@@ -290,7 +290,7 @@ def volvis(pos, size=3, alpha=1, colors=None, save=False, obb=None):
     #mesh = scene.visuals.Mesh(vertices=points, faces=faces, face_colors=face_colors)
     #view.add(mesh)
     # make legend
-    if 'Color' in pos.columns:
+    if 'Color' in pos.columns and legend:
         ions = []
         cs = []
         for g, d in pos.groupby('Color'):
@@ -471,9 +471,9 @@ def convex_hull_clusters(pos, comm_str, pos2=None, save=False,
             import matplotlib.colors as cols
             cpos = pos2.loc[:, ['x', 'y', 'z']].values
             colours2 = np.asarray(list(pos2.Color.apply(cols.hex2color)))
-            p1 = scene.visuals.Markers()
+            p1 = scene.visuals.Markers(parent=view.scene)
             p1.set_data(cpos, size=1, face_color=colours2)
-            view.add(p1)
+            # view.add(p1)
 
             #cpos_hull = cpos[pos2_ind, :]
             #p1 = scene.visuals.Markers()
@@ -642,7 +642,6 @@ def animate(pos, batch=1000, size=3, alpha=1, colors=None, save=False, obb=None)
 
     scatter = scene.visuals.Markers(pos=data[:1], face_color=colors[:1], parent=view.scene, size=size)
     detector = scene.visuals.Markers(pos=det_data, face_color=colors, parent=view.scene, size=size)
-
 
     def update(ev):
         global t, pos, color, line, k
