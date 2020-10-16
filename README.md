@@ -5,9 +5,10 @@ https://github.com/oscarbranson/apt-tools
 
 Step 1: Download the whole folder into a folder of choice. Create a subfolder named 'Data' inside the main folder, and download the demo datafile into the new subfolder using this [link](https://buffalo.box.com/shared/static/iy8my7kzpyplcty67xn9pixf08mm1dj4.csv). 
 
-Step 2: Open terminal and use conda to create an environment as:
+Step 2: Open terminal and use conda to create and activate an environment as:
 
 `conda create -n atomprobe python=3.7`
+
 `conda activate atomprobe` 
 
 Step 3: Navigate to the folder where the codes are copied and type:
