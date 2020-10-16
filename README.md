@@ -7,8 +7,8 @@ Step 1: Download the whole folder into a folder of choice. Create a subfolder na
 
 Step 2: Open terminal and use conda to create an environment as:
 
-`conda create -n atomprobe python=3.7
- conda activate atomprobe` 
+`conda create -n atomprobe python=3.7`
+`conda activate atomprobe` 
 
 Step 3: Navigate to the folder where the codes are copied and type:
 
