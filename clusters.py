@@ -28,7 +28,7 @@ def community_structure(dpos, algorithm, sigma=10.):
     return comm, partition
 
 
-def louvain_community(data, sigma=10.):
+def louvain_community(data, sigma=20.):
 
     from sklearn.metrics.pairwise import rbf_kernel
     from sklearn.preprocessing import normalize
@@ -41,7 +41,7 @@ def louvain_community(data, sigma=10.):
     A_Sc_norm = normalize(A_Sc, norm='l1', axis=1)
 
     G_Sc = nx.from_numpy_array(A_Sc_norm)
-    t = time.time()
+    print(time.time() - t)
     partition = community.best_partition(G_Sc)
     print(time.time() - t)
     return np.asarray([val for (key, val) in partition.items()]), partition, A_Sc
